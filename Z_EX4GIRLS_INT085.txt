@@ -1,0 +1,217 @@
+*&---------------------------------------------------------------------*
+*& Report Z_EX4GIRLS_INT085
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT Z_EX4GIRLS_INT085.
+
+**** Declarar uma tabela interna e uma opção de seleção
+TABLES: mara, makt.
+
+***** Para criar ALV, é preciso declarar para um grupo de tipos.
+TYPE-POOLS: slis.
+
+**** Begin of é um bloco de declaracao de variaveis
+TYPES: BEGIN OF ty_mara_bt1,
+        MATNR TYPE mara-matnr,
+        ERSDA TYPE mara-ersda,
+        ERNAM TYPE mara-ernam,
+        LVORM TYPE mara-lvorm,
+        MTART TYPE mara-mtart,
+        MATKL TYPE mara-matkl,
+      END OF ty_mara_bt1.
+
+TYPES: BEGIN OF ty_mara_bt2,
+        MATNR TYPE mara-matnr,
+        ERSDA TYPE mara-ersda,
+        AENAM TYPE mara-aenam,
+        LVORM TYPE mara-lvorm,
+        MTART TYPE mara-mtart,
+        MATKL TYPE mara-matkl,
+      END OF ty_mara_bt2.
+
+TYPES: BEGIN OF ty_makt,
+        MATNR TYPE makt-matnr,
+        MAKTX TYPE makt-maktx,
+        SPRAS TYPE makt-spras,
+       END OF ty_makt.
+
+DATA: t_mara_makt_bt1 TYPE TABLE OF ZEMATERIAIS_EX_INT,
+      t_mara_makt_bt2 TYPE TABLE OF ZEMATERIAIS_ELIMINADOS,
+      t_mara_bt1 TYPE TABLE OF ty_mara_bt1,
+      t_mara_bt2 TYPE TABLE OF ty_mara_bt2,
+      t_makt TYPE TABLE OF ty_makt,
+      w_mara_makt_bt1 TYPE ZEMATERIAIS_EX_INT,
+      w_mara_makt_bt2 TYPE ZEMATERIAIS_ELIMINADOS,
+      w_mara_bt1 TYPE ty_mara_bt1,
+      w_mara_bt2 TYPE ty_mara_bt2,
+      w_makt TYPE ty_makt.
+
+**** Declaracoes que sao usadas no ALV. Tabelas e estrutura que terao as informacoes dos campos do ralatorio.
+DATA t_fieldcat TYPE slis_t_fieldcat_alv. "categoria de tabela
+DATA w_fieldcat TYPE slis_fieldcat_alv. "linha, estrutura."
+
+**** Declaração dois botões de push
+SELECTION-SCREEN: BEGIN OF LINE,
+   PUSHBUTTON 5(20) botao1 USER-COMMAND bt1,
+   PUSHBUTTON 30(20) botao2 USER-COMMAND bt2,
+END OF LINE.
+
+***** Aqui começa os eventos. INITIALIZATION é um evento que é chamado ANTES de exibir a tela. Iremos dar os nomes dos botoes
+***** A ordem dos eventos é importante : 1. INITIALIZATION, 2. AT SELECTION-SCREEN e 3. START-OF-SELECTION
+INITIALIZATION.
+botao1 = 'Materiais Criados'.
+botao2 = 'Materiais Eliminados'.
+
+**** A opção de seleção "s_ersda" é criada para o campo "ersda" da tabela "mara". O usuário poderá selecionar um intervalo de valores para o campo "ersda" ao executar o programa.
+SELECT-OPTIONS: s_ersda FOR mara-ersda.
+
+***** Esse comando serve para validar as acoes. ***** sy-ucomm é uma variavel do sistema que retorna qual botao foi clicado.
+AT SELECTION-SCREEN.
+  CASE sy-ucomm.
+    WHEN 'BT1'.
+      PERFORM f_selec_dados_bt1.
+    WHEN 'BT2'.
+      PERFORM f_selec_dados_bt2.
+  ENDCASE.
+
+
+START-OF-SELECTION.
+
+FORM F_SELEC_DADOS_BT1.
+    "Com os dados da seleçao abaixo ir na tabela MAKT e buscar os campos MATNR, MAKTX et SPRAS com as condiçoes MATNR = MATNR selecionados na tabela MARA e SPRAS = 'PT'
+    SELECT matnr ersda ernam lvorm mtart matkl
+    FROM mara
+    INTO TABLE t_mara_bt1
+    WHERE ERSDA IN s_ersda AND
+          LVORM = space.
+
+          IF SY-SUBRC = 0.
+             SELECT matnr maktx spras
+             FROM makt
+             INTO TABLE t_makt
+             FOR ALL ENTRIES IN t_mara_bt1
+             WHERE matnr = t_mara_bt1-matnr AND
+                   spras = 'PT'.
+                   IF sy-subrc = 0. "Seleção OK
+                     PERFORM f_monta_fieldcat_bt1.
+                   ELSE.
+                     MESSAGE 'Não existem materiais criados para o periodo informado' TYPE 'I'.
+                   ENDIF.
+         ELSE.
+            MESSAGE 'Não existem materiais criados para o periodo informado' TYPE 'I'.
+         ENDIF.
+ENDFORM.
+
+
+FORM F_SELEC_DADOS_BT2.
+     SELECT matnr ersda aenam lvorm mtart matkl
+     FROM mara
+     INTO TABLE t_mara_bt2
+     WHERE ersda IN s_ersda AND
+           lvorm = 'X'.
+
+          IF sy-subrc = 0.
+             SELECT matnr maktx spras
+             FROM makt
+             INTO TABLE t_makt
+             FOR ALL ENTRIES IN t_mara_bt2
+             WHERE matnr = t_mara_bt2-matnr AND
+                   spras = 'PT'.
+                   "Verifica se a seleção da tabela MAKT retornou dados
+                   IF sy-subrc = 0.
+                     PERFORM f_monta_fieldcat_bt2.
+                   ELSE.
+                     MESSAGE 'Não existem materiais eliminados para o periodo informado' TYPE 'I'.
+                   ENDIF.
+         ELSE.
+           MESSAGE 'Não existem materiais eliminados para o periodo informado' TYPE 'I'.
+         ENDIF.
+ENDFORM.
+
+FORM F_MONTA_FIELDCAT_BT1.
+  LOOP AT t_makt INTO w_makt.
+    READ TABLE t_mara_bt1 INTO w_mara_bt1 WITH KEY matnr = w_makt-matnr.
+    IF sy-subrc = 0.
+      w_mara_makt_bt1-matnr = w_mara_bt1-matnr.
+      w_mara_makt_bt1-ersda = w_mara_bt1-ersda.
+      w_mara_makt_bt1-ernam = w_mara_bt1-ernam.
+      w_mara_makt_bt1-lvorm = w_mara_bt1-lvorm.
+      w_mara_makt_bt1-mtart = w_mara_bt1-mtart.
+      w_mara_makt_bt1-matkl = w_mara_bt1-matkl.
+      w_mara_makt_bt1-maktx = w_makt-maktx.
+      APPEND w_mara_makt_bt1 TO t_mara_makt_bt1.
+    ELSE.
+      MESSAGE 'Não existem materiais criados para o periodo informado' TYPE 'I'.
+    ENDIF.
+  ENDLOOP.
+  PERFORM f_fieldcat USING:
+        'MATNR' 'Material' 1,
+        'ERSDA' 'Data de criação' 2,
+        'ERNAM' 'Nome do responsavel que adicionou o objeto' 3,
+        'LVORM' 'Marcar mat.para eliminação a nivel de mandante' 4,
+        'MTART' 'Tipo de material' 5,
+        'MATKL' 'Grupo de mercadorias' 6,
+        'MAKTX' 'Descriçao do material' 7.
+  PERFORM f_exibe_alv_bt1.
+ENDFORM.
+
+FORM F_MONTA_FIELDCAT_BT2.
+  LOOP AT t_makt INTO w_makt.
+    READ TABLE t_mara_bt2 INTO w_mara_bt2 WITH KEY matnr = w_makt-matnr.
+    IF sy-subrc = 0.
+      w_mara_makt_bt2-matnr = w_mara_bt2-matnr.
+      w_mara_makt_bt2-ersda = w_mara_bt2-ersda.
+      w_mara_makt_bt2-aenam = w_mara_bt2-aenam.
+      w_mara_makt_bt2-lvorm = w_mara_bt2-lvorm.
+      w_mara_makt_bt2-mtart = w_mara_bt2-mtart.
+      w_mara_makt_bt2-matkl = w_mara_bt2-matkl.
+      w_mara_makt_bt2-maktx = w_makt-maktx.
+      APPEND w_mara_makt_bt2 TO t_mara_makt_bt2.
+    ELSE.
+      MESSAGE 'Não existem materiais criados para o periodo informado' TYPE 'I'.
+    ENDIF.
+  ENDLOOP.
+  PERFORM f_fieldcat USING:
+        'MATNR' 'Material' 1,
+        'ERSDA' 'Data de criação' 2,
+        'AENAM' 'Nome do responsavel pela modificação do objeto' 3,
+        'LVORM' 'Marcar mat.para eliminação a nivel de mandante' 4,
+        'MTART' 'Tipo de material' 5,
+        'MATKL' 'Grupo de mercadorias' 6,
+        'MAKTX' 'Descriçao do material' 7.
+  PERFORM f_exibe_alv_bt2.
+ENDFORM.
+
+FORM F_FIELDCAT USING p_campo p_descricao p_posicao.
+  w_fieldcat-fieldname = p_campo.
+  w_fieldcat-seltext_m = p_descricao.
+  w_fieldcat-col_pos   = p_posicao.
+
+  APPEND w_fieldcat TO t_fieldcat.
+  CLEAR  w_fieldcat.
+ENDFORM.
+
+FORM F_EXIBE_ALV_BT1.
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+  EXPORTING
+    I_CALLBACK_PROGRAM = sy-repid "Nome do programa"
+    IT_FIELDCAT = t_fieldcat " tabela interna com os campos do relatorio"
+  TABLES
+     T_OUTTAB = t_mara_makt_bt1
+  EXCEPTIONS
+    PROGRAM_ERROR = 1
+    OTHERS = 2.
+ENDFORM.
+
+FORM F_EXIBE_ALV_BT2.
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+  EXPORTING
+    I_CALLBACK_PROGRAM = sy-repid "Nome do programa"
+    IT_FIELDCAT = t_fieldcat " tabela interna com os campos do relatorio"
+  TABLES
+     T_OUTTAB = t_mara_makt_bt2
+  EXCEPTIONS
+    PROGRAM_ERROR = 1
+    OTHERS = 2.
+ENDFORM.
